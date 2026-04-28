@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 
@@ -33,7 +33,7 @@ class ExperimentIO:
         metadata_path.write_text(json.dumps(output.metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         return prefix
 
-    def load(self, path: str | Path) -> ExperimentOutput:
+    def load(self, path: Union[str, Path]) -> ExperimentOutput:
         prefix = self._resolve_prefix(Path(path))
         states = self._read_csv(prefix.with_name(f"{prefix.name}_states.csv"))
         controls = self._read_csv(prefix.with_name(f"{prefix.name}_controls.csv"))
@@ -81,7 +81,7 @@ class ExperimentIO:
 
 
 def save_multi_run_csv(
-    output_dir: str | Path,
+    output_dir: Union[str, Path],
     base_name: str,
     x0_list: np.ndarray,
     loss_list: np.ndarray,
@@ -108,7 +108,7 @@ def save_multi_run_csv(
     return prefix
 
 
-def load_multi_run_csv(path: str | Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+def load_multi_run_csv(path: Union[str, Path]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
     path = Path(path)
     name = path.stem
     for suffix in ("_x0", "_loss", "_residual", "_metadata"):

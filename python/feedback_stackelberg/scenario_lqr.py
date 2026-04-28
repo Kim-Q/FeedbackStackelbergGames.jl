@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional, Union
 
 import numpy as np
 
@@ -17,8 +17,8 @@ class LQRParameters:
     B_follower: np.ndarray = field(default_factory=lambda: np.array([[0.0], [0.5]], dtype=float))
     Q_leader: np.ndarray = field(default_factory=lambda: np.diag([1.0, 0.2]).astype(float))
     Q_follower: np.ndarray = field(default_factory=lambda: np.diag([0.8, 0.5]).astype(float))
-    Q_terminal_leader: np.ndarray | None = None
-    Q_terminal_follower: np.ndarray | None = None
+    Q_terminal_leader: Optional[np.ndarray] = None
+    Q_terminal_follower: Optional[np.ndarray] = None
     R_leader: np.ndarray = field(default_factory=lambda: np.array([[0.5]], dtype=float))
     R_follower: np.ndarray = field(default_factory=lambda: np.array([[0.3]], dtype=float))
     R_leader_follower: np.ndarray = field(default_factory=lambda: np.array([[0.1]], dtype=float))
@@ -26,9 +26,9 @@ class LQRParameters:
     Theta_leader: np.ndarray = field(default_factory=lambda: np.array([[0.05]], dtype=float))
     Theta_follower: np.ndarray = field(default_factory=lambda: np.array([[0.05]], dtype=float))
     x0: np.ndarray = field(default_factory=lambda: np.array([1.0, 0.0], dtype=float))
-    f_func: Callable[[np.ndarray], np.ndarray] | None = None
-    g_leader_func: Callable[[np.ndarray], np.ndarray] | None = None
-    g_follower_func: Callable[[np.ndarray], np.ndarray] | None = None
+    f_func: Optional[Callable[[np.ndarray], np.ndarray]] = None
+    g_leader_func: Optional[Callable[[np.ndarray], np.ndarray]] = None
+    g_follower_func: Optional[Callable[[np.ndarray], np.ndarray]] = None
 
     def __post_init__(self) -> None:
         self.normalize()
@@ -63,7 +63,7 @@ class LQRParameters:
 
 
 class LQRScenario:
-    def __init__(self, params: LQRParameters | None = None):
+    def __init__(self, params: Optional[LQRParameters] = None):
         self.params = params or LQRParameters()
         self.nx = int(self.params.A.shape[0])
         self._nu_leader = int(self.params.B_leader.shape[1])
@@ -179,7 +179,7 @@ class LQRScenario:
         return 0.5 * (state_term + control_term)
 
 
-def load_lqr_overrides(path: str | Path) -> Dict[str, Any]:
+def load_lqr_overrides(path: Union[str, Path]) -> Dict[str, Any]:
     path = Path(path)
     if path.suffix == ".npz":
         data = np.load(path, allow_pickle=True)
