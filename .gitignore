@@ -1,3 +1,26 @@
-Nothing should be ignored in this case, as the modified files are only Python source code files (.py) which are legitimate project files that should be tracked in version control. No build artifacts, dependencies, or temporary files are present in the changes.
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-Therefore, the .gitignore file should remain empty or unchanged from its current state (which appears to be empty).
+# Dependencies
+.venv/
+venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*
+```

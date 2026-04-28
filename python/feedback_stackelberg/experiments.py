@@ -29,7 +29,12 @@ class BaseExperiment:
     def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig):
         self.config = config
         self.solver_config = solver_config
-        self.io = ExperimentIO(config.output_dir)
+        self.run_subdir = self._generate_run_subdir()
+        self.io = ExperimentIO(config.output_dir, self.run_subdir)
+
+    def _generate_run_subdir(self) -> str:
+        timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
+        return f"run_{timestamp}"
 
     def run(self) -> Any:
         raise NotImplementedError
