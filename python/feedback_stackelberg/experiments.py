@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -80,10 +80,10 @@ class LQRExperiment(BaseExperiment):
         self,
         config: ExperimentConfig,
         solver_config: PDIPConfig,
-        lqr_params_path: str | None = None,
+        lqr_params_path: Optional[str] = None,
         lqr_dynamics: str = "linear",
-        lqr_horizon: int | None = None,
-        lqr_dt: float | None = None,
+        lqr_horizon: Optional[int] = None,
+        lqr_dt: Optional[float] = None,
     ):
         super().__init__(config, solver_config)
         self.lqr_params_path = lqr_params_path
@@ -288,11 +288,11 @@ class ExperimentRunner:
     def run(
         self,
         environment: str,
-        input_path: str | None = None,
-        lqr_params_path: str | None = None,
+        input_path: Optional[str] = None,
+        lqr_params_path: Optional[str] = None,
         lqr_dynamics: str = "linear",
-        lqr_horizon: int | None = None,
-        lqr_dt: float | None = None,
+        lqr_horizon: Optional[int] = None,
+        lqr_dt: Optional[float] = None,
     ) -> Any:
         if environment == "highway":
             experiment = HighwayExperiment(self.config, self.solver_config)
@@ -323,7 +323,7 @@ class ExperimentRunner:
             raise ValueError(f"Unsupported environment: {environment}")
         return experiment.run()
 
-    def _require_input(self, input_path: str | None) -> str:
+    def _require_input(self, input_path: Optional[str]) -> str:
         if not input_path:
             raise ValueError("input_path is required for this environment")
         return input_path

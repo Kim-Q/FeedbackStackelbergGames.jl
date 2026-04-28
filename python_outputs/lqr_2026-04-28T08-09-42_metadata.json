@@ -1,0 +1,9 @@
+{
+  "environment": "custom_lqr",
+  "dynamics": "linear",
+  "horizon": 40,
+  "state_dim": 2,
+  "control_dim": 2,
+  "final_loss": 9.21998908113883e+25,
+  "final_residual": 0.0
+}

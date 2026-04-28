@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Union
 
 import matplotlib
 import numpy as np
@@ -18,7 +18,7 @@ from feedback_stackelberg.scenario_lqr import LQRParameters
 def visualize_highway(
     scenario: HighwayScenario,
     states: np.ndarray,
-    output_dir: str | Path,
+    output_dir: Union[str, Path],
     base_name: str,
 ) -> dict[str, Path]:
     output_dir = Path(output_dir)
@@ -47,7 +47,7 @@ def visualize_lqr(
     params: LQRParameters,
     states: np.ndarray,
     controls: np.ndarray,
-    output_dir: str | Path,
+    output_dir: Union[str, Path],
     base_name: str,
 ) -> dict[str, Path]:
     output_dir = Path(output_dir)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-自定义 LQR 实验示例
+自定义 LQR 实验示例 - 使用论文中的标量参数
 
 演示如何在自定义的 LQR 环境中使用 PDIP 求解器。
-用户可以轻松切换不同的 LQR 参数配置。
+默认使用论文中提供的标量 LQR 参数配置。
 
 使用方法:
     python examples/custom_lqr.py
@@ -46,7 +46,7 @@ class CustomLQRExperiment:
         
         Args:
             output_dir: 输出目录
-            lqr_params: LQR 参数配置，若为 None 则使用默认配置
+            lqr_params: LQR 参数配置，若为 None 则使用默认配置（论文参数）
             solver_config: PDIP 求解器配置，若为 None 则使用默认配置
         """
         self.output_dir = output_dir
@@ -64,31 +64,50 @@ class CustomLQRExperiment:
         self.solver = PDIPSolver(config=self.solver_config)
     
     def _default_lqr_params(self) -> LQRParameters:
-        """默认 LQR 参数配置"""
+        """
+        默认 LQR 参数配置（来自论文）
+        
+        系统动态参数 (标量):
+            A = 0.8181      # 系统矩阵
+            B1 = 0.8175     # 玩家 1 控制输入矩阵
+            B2 = -0.7224    # 玩家 2 控制输入矩阵
+        
+        玩家 1 的代价函数参数:
+            Q1 = 0.1499     # 状态权重
+            Theta1 = 0.3245 # 对 u2 的交叉权重
+            R11 = 0.5186    # 对 u1 的权重
+            R12 = 0         # 对 u2 的权重
+        
+        玩家 2 的代价函数参数:
+            Q2 = 0.6596     # 状态权重
+            Theta2 = 0.4002 # 对 u1 的交叉权重
+            R22 = 0.9730    # 对 u2 的权重
+            R21 = 0         # 对 u1 的权重
+        
+        FSE 解参考值:
+            SE 1: K1=-0.6662, K2=1.1621
+            SE 2: K1=-0.9542, K2=0.8523
+            SE 3: K1=-1.6526, K2=0.7539
+        """
         return LQRParameters(
             horizon=30,
-            dt=0.05,
-            dynamics="linear",
-            # 系统矩阵 A (2x2)
-            A=np.array([[0.0, 1.0], [-1.0, -0.1]], dtype=float),
-            # Leader 控制矩阵 B1 (2x1)
-            B_leader=np.array([[0.0], [1.0]], dtype=float),
-            # Follower 控制矩阵 B2 (2x1)
-            B_follower=np.array([[0.0], [0.5]], dtype=float),
-            # 状态权重矩阵
-            Q_leader=np.diag([1.0, 0.2]).astype(float),
-            Q_follower=np.diag([0.8, 0.5]).astype(float),
-            # 控制权重矩阵
-            R_leader=np.array([[0.5]], dtype=float),
-            R_follower=np.array([[0.3]], dtype=float),
-            # 交叉耦合项
-            R_leader_follower=np.array([[0.1]], dtype=float),
-            R_follower_leader=np.array([[0.1]], dtype=float),
-            # 耦合项
-            Theta_leader=np.array([[0.05]], dtype=float),
-            Theta_follower=np.array([[0.05]], dtype=float),
+            dt=0.01,  # 积分时间步长
+            # 系统动态参数 (标量)
+            A=0.8181,
+            B1=0.8175,
+            B2=-0.7224,
+            # 玩家 1 的代价函数参数
+            Q1=0.1499,
+            Theta1=0.3245,
+            R11=0.5186,
+            R12=0.0,
+            # 玩家 2 的代价函数参数
+            Q2=0.6596,
+            Theta2=0.4002,
+            R22=0.9730,
+            R21=0.0,
             # 初始状态
-            x0=np.array([1.0, 0.0], dtype=float),
+            x0=1.0,
         )
     
     def run(self, save_output: bool = True) -> ExperimentOutput:
@@ -107,9 +126,13 @@ class CustomLQRExperiment:
         print(f"场景参数:")
         print(f"  - 预测时域：{self.lqr_params.horizon}")
         print(f"  - 时间步长：{self.lqr_params.dt}s")
-        print(f"  - 动力学类型：{self.lqr_params.dynamics}")
         print(f"  - 状态维度：{self.scenario.nx}")
         print(f"  - 控制维度：{self.scenario.nu}")
+        print()
+        print("系统参数:")
+        print(f"  - A={self.lqr_params.A[0,0]:.4f}, B1={self.lqr_params.B1[0,0]:.4f}, B2={self.lqr_params.B2[0,0]:.4f}")
+        print(f"  - Q1={self.lqr_params.Q1[0,0]:.4f}, Theta1={self.lqr_params.Theta1[0,0]:.4f}, R11={self.lqr_params.R11[0,0]:.4f}")
+        print(f"  - Q2={self.lqr_params.Q2[0,0]:.4f}, Theta2={self.lqr_params.Theta2[0,0]:.4f}, R22={self.lqr_params.R22[0,0]:.4f}")
         print()
         
         # ========== 步骤 1: 获取初始状态 ==========
@@ -128,7 +151,6 @@ class CustomLQRExperiment:
         # ========== 步骤 3: 打包实验结果 ==========
         metadata = {
             "environment": "custom_lqr",
-            "dynamics": self.lqr_params.dynamics,
             "horizon": self.lqr_params.horizon,
             "state_dim": self.scenario.nx,
             "control_dim": self.scenario.nu,
@@ -164,7 +186,7 @@ class CustomLQRExperiment:
             print("输出文件已保存:")
             print(f"  - 数据目录：{self.output_dir}/")
             print(f"  - 轨迹图：{vis_files['png']}")
-            print(f"  - 动画：{vis_files['gif']}")
+            print(f"  - 动画：{vis_files.get('gif', 'N/A')}")
             print()
         
         return output
@@ -174,17 +196,20 @@ def create_oscillatory_lqr() -> LQRParameters:
     """创建一个振荡系统的 LQR 参数配置"""
     return LQRParameters(
         horizon=40,
-        dt=0.05,
-        dynamics="linear",
-        # 振荡系统：二阶谐振子
-        A=np.array([[0.0, 1.0], [-4.0, -0.2]], dtype=float),
-        B_leader=np.array([[0.0], [1.0]], dtype=float),
-        B_follower=np.array([[0.0], [0.5]], dtype=float),
-        Q_leader=np.diag([2.0, 0.5]).astype(float),
-        Q_follower=np.diag([1.5, 0.3]).astype(float),
-        R_leader=np.array([[0.3]], dtype=float),
-        R_follower=np.array([[0.2]], dtype=float),
-        x0=np.array([0.5, 0.0], dtype=float),
+        dt=0.01,
+        # 振荡系统
+        A=0.5,
+        B1=0.8,
+        B2=-0.6,
+        Q1=1.0,
+        Theta1=0.2,
+        R11=0.3,
+        R12=0.0,
+        Q2=0.8,
+        Theta2=0.15,
+        R22=0.25,
+        R21=0.0,
+        x0=0.5,
     )
 
 
@@ -192,17 +217,20 @@ def create_unstable_lqr() -> LQRParameters:
     """创建一个不稳定系统的 LQR 参数配置"""
     return LQRParameters(
         horizon=30,
-        dt=0.05,
-        dynamics="linear",
-        # 不稳定系统（倒立摆线性化模型）
-        A=np.array([[0.0, 1.0], [9.8, -0.1]], dtype=float),
-        B_leader=np.array([[0.0], [1.0]], dtype=float),
-        B_follower=np.array([[0.0], [0.5]], dtype=float),
-        Q_leader=np.diag([10.0, 1.0]).astype(float),
-        Q_follower=np.diag([5.0, 0.5]).astype(float),
-        R_leader=np.array([[0.1]], dtype=float),
-        R_follower=np.array([[0.1]], dtype=float),
-        x0=np.array([0.1, 0.0], dtype=float),
+        dt=0.01,
+        # 不稳定系统
+        A=1.2,
+        B1=0.5,
+        B2=-0.3,
+        Q1=2.0,
+        Theta1=0.1,
+        R11=0.1,
+        R12=0.0,
+        Q2=1.5,
+        Theta2=0.08,
+        R22=0.15,
+        R21=0.0,
+        x0=0.1,
     )
 
 
@@ -229,7 +257,7 @@ def main():
     elif args.scenario == "unstable":
         lqr_params = create_unstable_lqr()
     else:
-        lqr_params = None  # 使用默认配置
+        lqr_params = None  # 使用默认配置（论文参数）
     
     # 创建求解器配置
     solver_config = PDIPConfig(

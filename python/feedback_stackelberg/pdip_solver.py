@@ -9,7 +9,7 @@ PDIP (Primal-Dual Interior Point Method) 求解器模块
 """
 
 from dataclasses import dataclass
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union
 
 import numpy as np
 
@@ -48,7 +48,7 @@ class PDIPSolver:
     构造障碍问题：min f(u) - μ * Σlog(s_i)
     """
     
-    def __init__(self, config: PDIPConfig | None = None):
+    def __init__(self, config: Union[PDIPConfig, None] = None):
         """初始化求解器
         
         Args:
@@ -56,7 +56,7 @@ class PDIPSolver:
         """
         self.config = config or PDIPConfig()
 
-    def solve(self, scenario: Any, initial_state: np.ndarray | None = None) -> PDIPResult:
+    def solve(self, scenario: Any, initial_state: Union[np.ndarray, None] = None) -> PDIPResult:
         """
         求解 Stackelberg 博弈问题
         

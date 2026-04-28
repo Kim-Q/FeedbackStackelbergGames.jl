@@ -2,56 +2,128 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional, Union
 
 import numpy as np
+from scipy.integrate import solve_ivp
 
 
 @dataclass
 class LQRParameters:
+    """LQR 参数配置 - 支持标量和矩阵形式"""
     horizon: int = 30
-    dt: float = 0.05
-    dynamics: str = "linear"
-    A: np.ndarray = field(default_factory=lambda: np.array([[0.0, 1.0], [-1.0, -0.1]], dtype=float))
-    B_leader: np.ndarray = field(default_factory=lambda: np.array([[0.0], [1.0]], dtype=float))
-    B_follower: np.ndarray = field(default_factory=lambda: np.array([[0.0], [0.5]], dtype=float))
-    Q_leader: np.ndarray = field(default_factory=lambda: np.diag([1.0, 0.2]).astype(float))
-    Q_follower: np.ndarray = field(default_factory=lambda: np.diag([0.8, 0.5]).astype(float))
-    Q_terminal_leader: np.ndarray | None = None
-    Q_terminal_follower: np.ndarray | None = None
-    R_leader: np.ndarray = field(default_factory=lambda: np.array([[0.5]], dtype=float))
-    R_follower: np.ndarray = field(default_factory=lambda: np.array([[0.3]], dtype=float))
-    R_leader_follower: np.ndarray = field(default_factory=lambda: np.array([[0.1]], dtype=float))
-    R_follower_leader: np.ndarray = field(default_factory=lambda: np.array([[0.1]], dtype=float))
-    Theta_leader: np.ndarray = field(default_factory=lambda: np.array([[0.05]], dtype=float))
-    Theta_follower: np.ndarray = field(default_factory=lambda: np.array([[0.05]], dtype=float))
-    x0: np.ndarray = field(default_factory=lambda: np.array([1.0, 0.0], dtype=float))
-    f_func: Callable[[np.ndarray], np.ndarray] | None = None
-    g_leader_func: Callable[[np.ndarray], np.ndarray] | None = None
-    g_follower_func: Callable[[np.ndarray], np.ndarray] | None = None
+    dt: float = 0.01  # 积分时间步长
+    
+    # 系统动态参数 (标量或矩阵)
+    A: Union[float, np.ndarray] = 0.8181
+    B1: Union[float, np.ndarray] = 0.8175  # 玩家 1 (leader) 控制输入
+    B2: Union[float, np.ndarray] = -0.7224  # 玩家 2 (follower) 控制输入
+    
+    # 玩家 1 (leader) 的代价函数参数
+    Q1: Union[float, np.ndarray] = 0.1499
+    Theta1: Union[float, np.ndarray] = 0.3245  # 对 u2 的交叉权重
+    R11: Union[float, np.ndarray] = 0.5186
+    R12: Union[float, np.ndarray] = 0.0
+    
+    # 玩家 2 (follower) 的代价函数参数
+    Q2: Union[float, np.ndarray] = 0.6596
+    Theta2: Union[float, np.ndarray] = 0.4002  # 对 u1 的交叉权重
+    R22: Union[float, np.ndarray] = 0.9730
+    R21: Union[float, np.ndarray] = 0.0
+    
+    # 终端代价权重 (可选，默认与阶段代价相同)
+    Q_terminal_leader: Optional[Union[float, np.ndarray]] = None
+    Q_terminal_follower: Optional[Union[float, np.ndarray]] = None
+    
+    # 初始状态
+    x0: Union[float, np.ndarray] = 1.0
+    
+    # 非线性动态函数 (可选)
+    f_func: Optional[Callable[[np.ndarray], np.ndarray]] = None
+    g_leader_func: Optional[Callable[[np.ndarray], np.ndarray]] = None
+    g_follower_func: Optional[Callable[[np.ndarray], np.ndarray]] = None
 
     def __post_init__(self) -> None:
         self.normalize()
 
     def normalize(self) -> None:
-        self.A = np.asarray(self.A, dtype=float)
-        self.B_leader = np.asarray(self.B_leader, dtype=float)
-        self.B_follower = np.asarray(self.B_follower, dtype=float)
-        self.Q_leader = np.asarray(self.Q_leader, dtype=float)
-        self.Q_follower = np.asarray(self.Q_follower, dtype=float)
-        self.R_leader = np.asarray(self.R_leader, dtype=float)
-        self.R_follower = np.asarray(self.R_follower, dtype=float)
-        self.R_leader_follower = np.asarray(self.R_leader_follower, dtype=float)
-        self.R_follower_leader = np.asarray(self.R_follower_leader, dtype=float)
-        self.Theta_leader = np.asarray(self.Theta_leader, dtype=float)
-        self.Theta_follower = np.asarray(self.Theta_follower, dtype=float)
-        self.x0 = np.asarray(self.x0, dtype=float)
+        """将所有参数转换为 numpy 数组"""
+        # 系统动态参数
+        if isinstance(self.A, (int, float)):
+            self.A = np.array([[self.A]], dtype=float)
+        else:
+            self.A = np.asarray(self.A, dtype=float)
+        
+        if isinstance(self.B1, (int, float)):
+            self.B1 = np.array([[self.B1]], dtype=float)
+        else:
+            self.B1 = np.asarray(self.B1, dtype=float)
+            
+        if isinstance(self.B2, (int, float)):
+            self.B2 = np.array([[self.B2]], dtype=float)
+        else:
+            self.B2 = np.asarray(self.B2, dtype=float)
+        
+        # 代价函数参数 - 玩家 1 (leader)
+        if isinstance(self.Q1, (int, float)):
+            self.Q1 = np.array([[self.Q1]], dtype=float)
+        else:
+            self.Q1 = np.asarray(self.Q1, dtype=float)
+            
+        if isinstance(self.Theta1, (int, float)):
+            self.Theta1 = np.array([[self.Theta1]], dtype=float)
+        else:
+            self.Theta1 = np.asarray(self.Theta1, dtype=float)
+            
+        if isinstance(self.R11, (int, float)):
+            self.R11 = np.array([[self.R11]], dtype=float)
+        else:
+            self.R11 = np.asarray(self.R11, dtype=float)
+            
+        if isinstance(self.R12, (int, float)):
+            self.R12 = np.array([[self.R12]], dtype=float)
+        else:
+            self.R12 = np.asarray(self.R12, dtype=float)
+        
+        # 代价函数参数 - 玩家 2 (follower)
+        if isinstance(self.Q2, (int, float)):
+            self.Q2 = np.array([[self.Q2]], dtype=float)
+        else:
+            self.Q2 = np.asarray(self.Q2, dtype=float)
+            
+        if isinstance(self.Theta2, (int, float)):
+            self.Theta2 = np.array([[self.Theta2]], dtype=float)
+        else:
+            self.Theta2 = np.asarray(self.Theta2, dtype=float)
+            
+        if isinstance(self.R22, (int, float)):
+            self.R22 = np.array([[self.R22]], dtype=float)
+        else:
+            self.R22 = np.asarray(self.R22, dtype=float)
+            
+        if isinstance(self.R21, (int, float)):
+            self.R21 = np.array([[self.R21]], dtype=float)
+        else:
+            self.R21 = np.asarray(self.R21, dtype=float)
+        
+        # 初始状态
+        if isinstance(self.x0, (int, float)):
+            self.x0 = np.array([self.x0], dtype=float)
+        else:
+            self.x0 = np.asarray(self.x0, dtype=float).reshape(-1)
+        
+        # 终端代价
         if self.Q_terminal_leader is None:
-            self.Q_terminal_leader = self.Q_leader.copy()
+            self.Q_terminal_leader = self.Q1.copy()
+        elif isinstance(self.Q_terminal_leader, (int, float)):
+            self.Q_terminal_leader = np.array([[self.Q_terminal_leader]], dtype=float)
         else:
             self.Q_terminal_leader = np.asarray(self.Q_terminal_leader, dtype=float)
+            
         if self.Q_terminal_follower is None:
-            self.Q_terminal_follower = self.Q_follower.copy()
+            self.Q_terminal_follower = self.Q2.copy()
+        elif isinstance(self.Q_terminal_follower, (int, float)):
+            self.Q_terminal_follower = np.array([[self.Q_terminal_follower]], dtype=float)
         else:
             self.Q_terminal_follower = np.asarray(self.Q_terminal_follower, dtype=float)
 
@@ -63,11 +135,13 @@ class LQRParameters:
 
 
 class LQRScenario:
-    def __init__(self, params: LQRParameters | None = None):
+    """LQR 场景类 - 实现标量/矩阵 LQR 动态和代价函数"""
+    
+    def __init__(self, params: Optional[LQRParameters] = None):
         self.params = params or LQRParameters()
         self.nx = int(self.params.A.shape[0])
-        self._nu_leader = int(self.params.B_leader.shape[1])
-        self._nu_follower = int(self.params.B_follower.shape[1])
+        self._nu_leader = int(self.params.B1.shape[1])
+        self._nu_follower = int(self.params.B2.shape[1])
         self.nu = self._nu_leader + self._nu_follower
         self.n_players = 2
         self.players_u_index_list = (
@@ -79,34 +153,32 @@ class LQRScenario:
         return self.params.x0.copy()
 
     def dynamics(self, state: np.ndarray, control: np.ndarray) -> np.ndarray:
+        """
+        状态动态方程：dot{x} = A*x + B1*u1 + B2*u2
+        使用 RK45 数值积分
+        """
         u_leader, u_follower = self._split_controls(control)
-        if self.params.dynamics == "linear":
-            return self._linear_dynamics(state, u_leader, u_follower)
-        return self._nonlinear_dynamics(state, u_leader, u_follower)
+        return self._integrate_dynamics(state, u_leader, u_follower)
 
     def stage_cost(self, state: np.ndarray, control: np.ndarray) -> float:
+        """
+        阶段代价函数：
+        J1 = 0.5 * [Q1*x^2 + Theta1*u2^2 + R11*u1^2 + R12*u2^2]
+        J2 = 0.5 * [Q2*x^2 + Theta2*u1^2 + R22*u2^2 + R21*u1^2]
+        返回总代价 J1 + J2
+        """
         u_leader, u_follower = self._split_controls(control)
-        leader_cost = self._player_cost(
-            self.params.Q_leader,
-            self.params.R_leader,
-            self.params.R_leader_follower,
-            self.params.Theta_leader,
-            state,
-            u_leader,
-            u_follower,
-        )
-        follower_cost = self._player_cost(
-            self.params.Q_follower,
-            self.params.R_follower,
-            self.params.R_follower_leader,
-            self.params.Theta_follower,
-            state,
-            u_follower,
-            u_leader,
-        )
+        
+        # 玩家 1 (leader) 的代价
+        leader_cost = self._player1_cost(state, u_leader, u_follower)
+        
+        # 玩家 2 (follower) 的代价
+        follower_cost = self._player2_cost(state, u_leader, u_follower)
+        
         return float(leader_cost + follower_cost)
 
     def terminal_cost(self, state: np.ndarray) -> float:
+        """终端代价"""
         leader_cost = 0.5 * float(state @ self.params.Q_terminal_leader @ state)
         follower_cost = 0.5 * float(state @ self.params.Q_terminal_follower @ state)
         return float(leader_cost + follower_cost)
@@ -118,6 +190,7 @@ class LQRScenario:
         return np.empty((0,), dtype=float)
 
     def forward_simulation(self, x0: np.ndarray, controls: np.ndarray) -> np.ndarray:
+        """前向模拟得到状态轨迹"""
         states = np.zeros((self.params.horizon + 1, self.nx), dtype=float)
         states[0] = x0
         for t in range(self.params.horizon):
@@ -125,6 +198,7 @@ class LQRScenario:
         return states
 
     def total_cost(self, states: np.ndarray, controls: np.ndarray) -> float:
+        """计算总代价"""
         total = 0.0
         for t in range(self.params.horizon):
             total += self.stage_cost(states[t], controls[t])
@@ -140,46 +214,56 @@ class LQRScenario:
         follower = control[self._nu_leader :]
         return leader, follower
 
-    def _linear_dynamics(
+    def _integrate_dynamics(
         self, state: np.ndarray, u_leader: np.ndarray, u_follower: np.ndarray
     ) -> np.ndarray:
-        x_dot = self.params.A @ state + self.params.B_leader @ u_leader + self.params.B_follower @ u_follower
-        return state + self.params.dt * x_dot
+        """
+        使用 scipy.integrate.solve_ivp 进行 RK45 积分
+        dot{x} = A*x + B1*u1 + B2*u2
+        
+        注意：对于标量情况，需要将控制量转换为适当的形状
+        """
+        # 确保状态是列向量 (nx, 1)
+        x = state.reshape(-1, 1) if state.ndim == 1 else state
+        
+        # 将控制量转为列向量
+        u1_val = np.asarray(u_leader).reshape(-1, 1) if u_leader.size > 0 else np.zeros((self._nu_leader, 1))
+        u2_val = np.asarray(u_follower).reshape(-1, 1) if u_follower.size > 0 else np.zeros((self._nu_follower, 1))
+        
+        # 定义微分方程
+        def dxdt(t, x_flat):
+            x_vec = x_flat.reshape(-1, 1)
+            return (self.params.A @ x_vec + self.params.B1 @ u1_val + self.params.B2 @ u2_val).ravel()
+        
+        # 积分
+        sol = solve_ivp(dxdt, (0, self.params.dt), state.ravel(), method='RK45', rtol=1e-8, atol=1e-10)
+        return sol.y[:, -1]
 
-    def _nonlinear_dynamics(
-        self, state: np.ndarray, u_leader: np.ndarray, u_follower: np.ndarray
-    ) -> np.ndarray:
-        f_func = self.params.f_func or self._default_f
-        g_leader = self.params.g_leader_func or self._default_g_leader
-        g_follower = self.params.g_follower_func or self._default_g_follower
-        x_dot = f_func(state) + g_leader(state) @ u_leader + g_follower(state) @ u_follower
-        return state + self.params.dt * x_dot
+    def _player1_cost(self, state: np.ndarray, u1: np.ndarray, u2: np.ndarray) -> float:
+        """
+        玩家 1 (leader) 的代价函数：
+        J1 = 0.5 * [x'*Q1*x + u2'*Theta1*u2 + u1'*R11*u1 + u2'*R12*u2]
+        """
+        state_term = float(state @ self.params.Q1 @ state)
+        u1_term = float(u1 @ self.params.R11 @ u1)
+        u2_theta_term = float(u2 @ self.params.Theta1 @ u2)
+        u2_r12_term = float(u2 @ self.params.R12 @ u2)
+        return 0.5 * (state_term + u1_term + u2_theta_term + u2_r12_term)
 
-    def _default_f(self, state: np.ndarray) -> np.ndarray:
-        return self.params.A @ state + 0.1 * np.sin(state)
-
-    def _default_g_leader(self, state: np.ndarray) -> np.ndarray:
-        return self.params.B_leader
-
-    def _default_g_follower(self, state: np.ndarray) -> np.ndarray:
-        return self.params.B_follower
-
-    def _player_cost(
-        self,
-        Q: np.ndarray,
-        R_ii: np.ndarray,
-        R_ij: np.ndarray,
-        Theta: np.ndarray,
-        state: np.ndarray,
-        u_i: np.ndarray,
-        u_j: np.ndarray,
-    ) -> float:
-        state_term = float(state @ Q @ state)
-        control_term = float(u_i @ R_ii @ u_i + u_j @ R_ij @ u_j + 2.0 * u_i @ Theta @ u_j)
-        return 0.5 * (state_term + control_term)
+    def _player2_cost(self, state: np.ndarray, u1: np.ndarray, u2: np.ndarray) -> float:
+        """
+        玩家 2 (follower) 的代价函数：
+        J2 = 0.5 * [x'*Q2*x + u1'*Theta2*u1 + u2'*R22*u2 + u1'*R21*u1]
+        """
+        state_term = float(state @ self.params.Q2 @ state)
+        u2_term = float(u2 @ self.params.R22 @ u2)
+        u1_theta_term = float(u1 @ self.params.Theta2 @ u1)
+        u1_r21_term = float(u1 @ self.params.R21 @ u1)
+        return 0.5 * (state_term + u2_term + u1_theta_term + u1_r21_term)
 
 
-def load_lqr_overrides(path: str | Path) -> Dict[str, Any]:
+def load_lqr_overrides(path: Union[str, Path]) -> Dict[str, Any]:
+    """加载 LQR 参数覆盖"""
     path = Path(path)
     if path.suffix == ".npz":
         data = np.load(path, allow_pickle=True)

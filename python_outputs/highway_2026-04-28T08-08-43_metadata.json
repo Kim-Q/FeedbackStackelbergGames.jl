@@ -1,0 +1,8 @@
+{
+  "environment": "highway",
+  "swap_roles": false,
+  "horizon": 20,
+  "max_iter": 20,
+  "final_loss": 34.1834864008673,
+  "final_residual": 3.3500041074556584
+}
