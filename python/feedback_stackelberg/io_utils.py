@@ -16,8 +16,10 @@ class ExperimentOutput:
 
 
 class ExperimentIO:
-    def __init__(self, output_dir: str):
+    def __init__(self, output_dir: str, run_subdir: str = None):
         self.output_dir = Path(output_dir)
+        if run_subdir is not None:
+            self.output_dir = self.output_dir / run_subdir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, output: ExperimentOutput, filename: str) -> Path:

@@ -15,21 +15,28 @@ class LQRParameters:
     dt: float = 0.01  # 积分时间步长
     
     # 系统动态参数 (标量或矩阵)
-    A: Union[float, np.ndarray] = 0.8181
-    B1: Union[float, np.ndarray] = 0.8175  # 玩家 1 (leader) 控制输入
-    B2: Union[float, np.ndarray] = -0.7224  # 玩家 2 (follower) 控制输入
+    A: Union[float, np.ndarray] = 0.8181      # 系统矩阵 (标量)
+    B1: Union[float, np.ndarray] = 0.8175     # 玩家 1 控制输入矩阵
+    B2: Union[float, np.ndarray] = -0.7224    # 玩家 2 控制输入矩阵
     
-    # 玩家 1 (leader) 的代价函数参数
-    Q1: Union[float, np.ndarray] = 0.1499
-    Theta1: Union[float, np.ndarray] = 0.3245  # 对 u2 的交叉权重
-    R11: Union[float, np.ndarray] = 0.5186
-    R12: Union[float, np.ndarray] = 0.0
+    # 玩家 1 的代价函数参数
+    Q1: Union[float, np.ndarray] = 0.1499     # 状态权重
+    Theta1: Union[float, np.ndarray] = 0.3245 # 对 u2 的交叉权重 (Θ₁)
+    R11: Union[float, np.ndarray] = 0.5186    # 对 u1 的权重
+    R12: Union[float, np.ndarray] = 0         # 对 u2 的权重
     
-    # 玩家 2 (follower) 的代价函数参数
-    Q2: Union[float, np.ndarray] = 0.6596
-    Theta2: Union[float, np.ndarray] = 0.4002  # 对 u1 的交叉权重
-    R22: Union[float, np.ndarray] = 0.9730
-    R21: Union[float, np.ndarray] = 0.0
+    # 玩家 2 的代价函数参数
+    Q2: Union[float, np.ndarray] = 0.6596     # 状态权重
+    Theta2: Union[float, np.ndarray] = 0.4002 # 对 u1 的交叉权重 (Θ₂)
+    R22: Union[float, np.ndarray] = 0.9730    # 对 u2 的权重
+    R21: Union[float, np.ndarray] = 0         # 对 u1 的权重
+    
+    # FSE (Feedback Stackelberg Equilibrium) 解
+    FSE_solutions: Dict[str, Dict[str, float]] = field(default_factory=lambda: {
+        "SE 1": {"K1_star": -0.6662, "K2_star": 1.1621},
+        "SE 2": {"K1_star": -0.9542, "K2_star": 0.8523},
+        "SE 3": {"K1_star": -1.6526, "K2_star": 0.7539}
+    })
     
     # 终端代价权重 (可选，默认与阶段代价相同)
     Q_terminal_leader: Optional[Union[float, np.ndarray]] = None
