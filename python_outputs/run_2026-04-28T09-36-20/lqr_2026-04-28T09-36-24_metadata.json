@@ -1,7 +1,0 @@
-{
-  "environment": "lqr",
-  "dynamics": "linear",
-  "horizon": 30,
-  "state_dim": 1,
-  "control_dim": 2
-}
