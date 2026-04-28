@@ -1,12 +1,20 @@
 ```
-# Python compiled files
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Python outputs
-python_outputs/
+# Dependencies
+.venv/
+venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
 
 # Logs
 *.log
@@ -15,8 +23,4 @@ python_outputs/
 .env
 .env.local
 .env.*
-
-# Dependencies
-venv/
-.venv/
 ```

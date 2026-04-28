@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -20,7 +20,7 @@ class HighwayParameters:
 
 
 class HighwayScenario:
-    def __init__(self, params: HighwayParameters | None = None, swap_roles: bool = False):
+    def __init__(self, params: Optional[HighwayParameters] = None, swap_roles: bool = False):
         self.params = params or HighwayParameters()
         self.swap_roles = swap_roles
         self.nx = 8
