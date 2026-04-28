@@ -115,6 +115,10 @@ class LQRExperiment(BaseExperiment):
         self.io.save(output, filename)
         return output
 
+    def _build_filename(self, prefix: str) -> str:
+        timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
+        return f"{prefix}_{timestamp}.npz"
+
 
 class HighwayWithoutSavingExperiment(HighwayExperiment):
     def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig):
