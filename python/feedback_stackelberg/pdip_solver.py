@@ -88,11 +88,28 @@ class PDIPSolver:
         
         # 障碍参数 μ，控制对数障碍的权重
         mu = self.config.barrier_mu
+        
+        print("\n" + "="*80)
+        print("PDIP 求解器启动")
+        print("="*80)
+        print(f"初始障碍参数 μ (rho): {mu:.6e}")
+        if slack.size > 0:
+            print(f"初始松弛变量 s: min={slack.min():.6e}, max={slack.max():.6e}")
+            print(f"初始对偶变量 λ: min={dual.min():.6e}, max={dual.max():.6e}")
+        else:
+            print("无约束问题（松弛变量和对偶变量为空）")
+        print(f"内层 Newton 迭代最大次数 k_max: {self.config.max_iter}")
+        print("="*80 + "\n")
 
         # ========== 步骤 2: 外层循环 - 更新障碍参数 ==========
         for outer_iter in range(self.config.outer_iter):
             inner_loss: List[float] = []
             inner_residual: List[float] = []
+            
+            print(f"\n{'='*60}")
+            print(f"外层迭代 {outer_iter + 1}/{self.config.outer_iter}")
+            print(f"当前障碍参数 μ (rho): {mu:.6e}")
+            print(f"{'='*60}")
             
             # ========== 步骤 3: 内层牛顿迭代 ==========
             for iteration in range(self.config.max_iter):
@@ -129,9 +146,29 @@ class PDIPSolver:
                 inner_loss.append(total_cost)
                 inner_residual.append(residual_norm)
                 
+                # 打印迭代过程变量
+                print(f"\n  [Newton k={iteration+1}/{self.config.max_iter}]")
+                print(f"    代价函数 J: {total_cost:.6e}")
+                print(f"    对偶残差 ||r_dual||: {np.linalg.norm(r_dual):.6e}")
+                print(f"    原始残差 ||r_pri||: {np.linalg.norm(r_pri):.6e}")
+                print(f"    中心性残差 ||r_cent||: {np.linalg.norm(r_cent):.6e}")
+                print(f"    总残差 ||r||: {residual_norm:.6e}")
+                print(f"    障碍参数 μ (rho): {mu:.6e}")
+                if slack.size > 0:
+                    print(f"    松弛变量 s: min={slack.min():.6e}, max={slack.max():.6e}, mean={slack.mean():.6e}")
+                    print(f"    对偶变量 λ: min={dual.min():.6e}, max={dual.max():.6e}, mean={dual.mean():.6e}")
+                    # 打印互补松弛条件 s*λ - μ
+                    complementarity = slack * dual - mu
+                    print(f"    互补松弛 s*λ-μ：min={complementarity.min():.6e}, max={complementarity.max():.6e}")
+                else:
+                    print("    无约束问题，跳过松弛变量和对偶变量信息")
+                
                 # 检查收敛性：若残差小于阈值则停止迭代
                 if residual_norm < self.config.residual_tol:
+                    print(f"\n  ✓ 内层迭代收敛！残差 {residual_norm:.6e} < 阈值 {self.config.residual_tol:.6e}")
                     break
+                else:
+                    print(f"  ✗ 未收敛，继续迭代...")
                 
                 # ----- 步骤 3.4: 求解牛顿方向 -----
                 # 线性化 KKT 条件，得到如下线性系统：
@@ -143,24 +180,49 @@ class PDIPSolver:
                     jacobian, r_dual, r_pri, r_cent, slack, dual
                 )
                 
+                print(f"\n    牛顿方向 Δu: min={delta_u.min():.6e}, max={delta_u.max():.6e}")
+                if delta_dual.size > 0:
+                    print(f"    牛顿方向 Δλ: min={delta_dual.min():.6e}, max={delta_dual.max():.6e}")
+                    print(f"    牛顿方向 Δs: min={delta_slack.min():.6e}, max={delta_slack.max():.6e}")
+                else:
+                    print("    无约束问题，跳过 Δλ 和 Δs")
+                
                 # ----- 步骤 3.5: 线搜索保证正性约束 -----
                 # 由于要求 s > 0 和 λ > 0，需要限制步长
                 step = self._line_search(slack, dual, delta_slack, delta_dual)
                 
+                print(f"    线搜索步长 α: {step:.6f}")
+                
                 # ----- 步骤 3.6: 更新原始变量与对偶变量 -----
                 controls = self._update_controls(controls, delta_u, step)
-                slack = slack + step * delta_slack
-                dual = dual + step * delta_dual
+                if slack.size > 0:
+                    slack = slack + step * delta_slack
+                    dual = dual + step * delta_dual
+                    print(f"    更新后控制 u: min={controls.min():.6e}, max={controls.max():.6e}")
+                    print(f"    更新后松弛 s: min={slack.min():.6e}, max={slack.max():.6e}")
+                    print(f"    更新后对偶 λ: min={dual.min():.6e}, max={dual.max():.6e}")
+                else:
+                    print(f"    更新后控制 u: min={controls.min():.6e}, max={controls.max():.6e}")
+                    print("    无约束问题，跳过松弛和对偶变量更新")
                 
             loss_history.append(inner_loss)
             residual_history.append(inner_residual)
             
             # 衰减障碍参数，逐步逼近原问题的解
             # μ → 0 时，障碍问题的解趋向于原问题的解
+            old_mu = mu
             mu *= self.config.barrier_decay
+            print(f"\n  外层迭代完成：障碍参数 μ 从 {old_mu:.6e} 衰减到 {mu:.6e} (decay={self.config.barrier_decay})")
 
         # 最终前向传播获取最优状态轨迹
         states = scenario.forward_simulation(x0, controls)
+        print(f"\n{'='*80}")
+        print("PDIP 求解完成")
+        print(f"最终状态 x_T: {states[-1]}")
+        print(f"最终控制 u: min={controls.min():.6e}, max={controls.max():.6e}")
+        print(f"最终障碍参数 μ: {mu:.6e}")
+        print(f"外层迭代次数：{len(loss_history)}")
+        print(f"{'='*80}\n")
         return PDIPResult(
             states=states,
             controls=controls,
