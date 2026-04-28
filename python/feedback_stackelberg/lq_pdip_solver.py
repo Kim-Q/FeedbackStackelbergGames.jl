@@ -106,8 +106,7 @@ class NWPDIPFBSTLQSolver:
     3. 利用 LQ 结构，向后递推计算反馈策略
     """
     
-    def __init__(self, rho: float = 1.0, max_iter: int = 10, verbose: bool = True,
-                 target_K: Optional[Tuple[float, float]] = None):
+    def __init__(self, rho: float = 1.0, max_iter: int = 10, verbose: bool = True):
         """
         初始化求解器
         
@@ -115,12 +114,10 @@ class NWPDIPFBSTLQSolver:
             rho: PDIP 惩罚参数 (ρ = 1/t)，设为 0.0 表示无不等式约束
             max_iter: 最大迭代次数
             verbose: 是否打印调试信息
-            target_K: 目标最优策略 (K1*, K2*) 用于验证收敛性（仅适用于标量 LQR）
         """
         self.rho = rho
         self.max_iter = max_iter
         self.verbose = verbose
-        self.target_K = target_K
     
     def solve(self, game: LQGameParams, current_op: Trajectory) -> Tuple[Trajectory, Strategy]:
         """
@@ -169,8 +166,6 @@ class NWPDIPFBSTLQSolver:
             print(f"障碍参数 ρ: {self.rho}")
             print(f"存在中间不等式约束：{have_intermediate_ineq}")
             print(f"存在终端不等式约束：{have_terminal_ineq}")
-            if self.target_K is not None:
-                print(f"目标最优策略 K1*: {self.target_K[0]:.6f}, K2*: {self.target_K[1]:.6f}")
             print(f"{'='*60}\n")
         
         # ========== 向后递推求解 ==========
@@ -237,13 +232,6 @@ class NWPDIPFBSTLQSolver:
                 # 更新策略
                 strategies_P[t - 1] = -K[:nu, :]
                 strategies_alpha[t - 1] = -k[:nu].flatten()
-                # 打印当前策略与目标策略的对比（仅适用于标量 LQR）
-                if self.verbose and self.target_K is not None and nx == 1 and nu == 2:
-                    K1_current = strategies_P[t - 1][0, 0]
-                    K2_current = strategies_P[t - 1][1, 0]
-                    K1_err = abs(K1_current - self.target_K[0])
-                    K2_err = abs(K2_current - self.target_K[1])
-                    print(f"    时刻 t={t} 策略：K1={K1_current:.6f} (误差：{K1_err:.6e}), K2={K2_current:.6f} (误差：{K2_err:.6e})")
                 
                 # 更新向后递推的增益
                 K_next = -K[:nu, :]
@@ -289,13 +277,6 @@ class NWPDIPFBSTLQSolver:
                 # 更新策略
                 strategies_P[t - 1] = -K[:nu, :]
                 strategies_alpha[t - 1] = -k[:nu].flatten()
-                # 打印当前策略与目标策略的对比（仅适用于标量 LQR）
-                if self.verbose and self.target_K is not None and nx == 1 and nu == 2:
-                    K1_current = strategies_P[t - 1][0, 0]
-                    K2_current = strategies_P[t - 1][1, 0]
-                    K1_err = abs(K1_current - self.target_K[0])
-                    K2_err = abs(K2_current - self.target_K[1])
-                    print(f"    时刻 t={t} 策略：K1={K1_current:.6f} (误差：{K1_err:.6e}), K2={K2_current:.6f} (误差：{K2_err:.6e})")
                 
                 # 更新向后递推的增益
                 K_next = -K[:nu, :]
@@ -437,28 +418,22 @@ class NWPDIPFBSTLQSolver:
         m = len(game.players_u_index_list[0])
         ll = game.inequality_constraints_size
         l = game.equality_constraints_size
-        num_player = game.n_players
         
         # 构造 leader 的 KKT 系统
         # 基础版本（无约束）
         Pi_2 = np.zeros((m, nu))
         Pi_2[:, m:] = pi_check_2
         
-        # Mt 矩阵维度：
-        # 第一行：[R_t (nu x nu), B.T (nu x nx), Pi_2.T (nu x m)] -> (nu, nu+nx+m)
-        # 第二行：[-B (nx x nu), zeros (nx x nx), eye (nx x nx)] -> (nx, nu+nx+nx)
-        # 第三行：[zeros (nx*num_player x nu), -eye (nx*num_player x nx*num_player)[:,:nx], Q_next (nx*num_player x nx)]
-        
         Mt = np.block([
             [R_t, B.T, Pi_2.T],
             [-B, np.zeros((nx, nx)), np.eye(nx)],
-            [np.zeros((nx * num_player, nu)), -np.eye(nx * num_player)[:, :nx], Q_next]
+            [np.zeros((nx, nu)), -np.eye(nx), Q_next]
         ])
         
         Nt = np.block([
             [np.zeros((nu, nx))],
             [-A],
-            [np.zeros((nx * num_player, nx))]
+            [np.zeros((nx, nx))]
         ])
         
         nt = np.block([
