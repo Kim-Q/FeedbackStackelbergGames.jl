@@ -8,6 +8,7 @@ from feedback_stackelberg.config import ExperimentConfig, PDIPConfig
 from feedback_stackelberg.io_utils import ExperimentIO, ExperimentOutput
 from feedback_stackelberg.pdip_solver import PDIPSolver
 from feedback_stackelberg.scenario_highway import HighwayParameters, HighwayScenario
+from feedback_stackelberg.scenario_lqr import LQRParameters, LQRScenario, load_lqr_overrides
 
 
 @dataclass
@@ -64,6 +65,55 @@ class HighwayExperiment(BaseExperiment):
     def _build_filename(self, prefix: str) -> str:
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
         return f"{prefix}_{timestamp}.npz"
+
+
+class LQRExperiment(BaseExperiment):
+    def __init__(
+        self,
+        config: ExperimentConfig,
+        solver_config: PDIPConfig,
+        lqr_params_path: str | None = None,
+        lqr_dynamics: str = "linear",
+        lqr_horizon: int | None = None,
+        lqr_dt: float | None = None,
+    ):
+        super().__init__(config, solver_config)
+        self.lqr_params_path = lqr_params_path
+        self.lqr_dynamics = lqr_dynamics
+        self.lqr_horizon = lqr_horizon
+        self.lqr_dt = lqr_dt
+
+    def run(self) -> ExperimentOutput:
+        params = LQRParameters()
+        if self.lqr_params_path:
+            params.apply_overrides(load_lqr_overrides(self.lqr_params_path))
+        if self.lqr_horizon is not None:
+            params.horizon = self.lqr_horizon
+        if self.lqr_dt is not None:
+            params.dt = self.lqr_dt
+        if self.lqr_dynamics:
+            params.dynamics = self.lqr_dynamics
+        params.normalize()
+        scenario = LQRScenario(params=params)
+        solver = PDIPSolver(self.solver_config)
+        result = solver.solve(scenario, scenario.initial_state())
+        metadata = {
+            "environment": "lqr",
+            "dynamics": params.dynamics,
+            "horizon": params.horizon,
+            "state_dim": scenario.nx,
+            "control_dim": scenario.nu,
+        }
+        output = ExperimentOutput(
+            states=result.states,
+            controls=result.controls,
+            loss_history=result.loss_history,
+            residual_history=result.residual_history,
+            metadata=metadata,
+        )
+        filename = self._build_filename("lqr")
+        self.io.save(output, filename)
+        return output
 
 
 class HighwayWithoutSavingExperiment(HighwayExperiment):
@@ -221,7 +271,15 @@ class ExperimentRunner:
         self.config = config
         self.solver_config = solver_config
 
-    def run(self, environment: str, input_path: str | None = None) -> Any:
+    def run(
+        self,
+        environment: str,
+        input_path: str | None = None,
+        lqr_params_path: str | None = None,
+        lqr_dynamics: str = "linear",
+        lqr_horizon: int | None = None,
+        lqr_dt: float | None = None,
+    ) -> Any:
         if environment == "highway":
             experiment = HighwayExperiment(self.config, self.solver_config)
         elif environment == "highway_without_saving_data":
@@ -237,6 +295,15 @@ class ExperimentRunner:
         elif environment == "highway_multi_run_plot":
             experiment = HighwayMultiRunPlotExperiment(
                 self.config, self.solver_config, self._require_input(input_path)
+            )
+        elif environment == "lqr":
+            experiment = LQRExperiment(
+                self.config,
+                self.solver_config,
+                lqr_params_path=lqr_params_path,
+                lqr_dynamics=lqr_dynamics,
+                lqr_horizon=lqr_horizon,
+                lqr_dt=lqr_dt,
             )
         else:
             raise ValueError(f"Unsupported environment: {environment}")

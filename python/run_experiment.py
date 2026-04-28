@@ -16,6 +16,7 @@ def main() -> None:
             "highway_multi_run",
             "highway_data_processing",
             "highway_multi_run_plot",
+            "lqr",
         ],
     )
     parser.add_argument("--input", help="Input .npz file for data processing or plotting.")
@@ -26,6 +27,15 @@ def main() -> None:
     parser.add_argument("--outer-iter", type=int, default=1)
     parser.add_argument("--barrier-mu", type=float, default=1.0)
     parser.add_argument("--barrier-decay", type=float, default=0.5)
+    parser.add_argument("--lqr-config", help="Path to LQR parameter file (.npz or .json).")
+    parser.add_argument(
+        "--lqr-dynamics",
+        choices=["linear", "nonlinear"],
+        default="linear",
+        help="Choose linear or nonlinear dynamics for the LQR environment.",
+    )
+    parser.add_argument("--lqr-horizon", type=int, help="Override LQR horizon.")
+    parser.add_argument("--lqr-dt", type=float, help="Override LQR time step.")
     args = parser.parse_args()
 
     experiment_config = ExperimentConfig(
@@ -40,7 +50,14 @@ def main() -> None:
         barrier_decay=args.barrier_decay,
     )
     runner = ExperimentRunner(experiment_config, solver_config)
-    runner.run(args.env, input_path=args.input)
+    runner.run(
+        args.env,
+        input_path=args.input,
+        lqr_params_path=args.lqr_config,
+        lqr_dynamics=args.lqr_dynamics,
+        lqr_horizon=args.lqr_horizon,
+        lqr_dt=args.lqr_dt,
+    )
 
 
 if __name__ == "__main__":

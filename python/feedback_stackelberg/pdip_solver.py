@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import numpy as np
 
 from feedback_stackelberg.config import PDIPConfig
-from feedback_stackelberg.scenario_highway import HighwayScenario
 
 
 @dataclass
@@ -21,7 +20,7 @@ class PDIPSolver:
     def __init__(self, config: PDIPConfig | None = None):
         self.config = config or PDIPConfig()
 
-    def solve(self, scenario: HighwayScenario, initial_state: np.ndarray | None = None) -> PDIPResult:
+    def solve(self, scenario: Any, initial_state: np.ndarray | None = None) -> PDIPResult:
         x0 = initial_state.copy() if initial_state is not None else scenario.initial_state()
         controls = np.zeros((scenario.params.horizon, scenario.nu), dtype=float)
         constraint_dim = scenario.collect_constraints(
@@ -75,9 +74,7 @@ class PDIPSolver:
             residual_history=residual_history,
         )
 
-    def _finite_difference_gradient(
-        self, scenario: HighwayScenario, x0: np.ndarray, controls: np.ndarray
-    ) -> np.ndarray:
+    def _finite_difference_gradient(self, scenario: Any, x0: np.ndarray, controls: np.ndarray) -> np.ndarray:
         base_cost = self._total_cost_from_controls(scenario, x0, controls)
         controls_vec = controls.reshape(-1)
         grad = np.zeros_like(controls_vec)
@@ -90,11 +87,7 @@ class PDIPSolver:
         return grad
 
     def _finite_difference_jacobian(
-        self,
-        scenario: HighwayScenario,
-        x0: np.ndarray,
-        controls: np.ndarray,
-        base_constraints: np.ndarray,
+        self, scenario: Any, x0: np.ndarray, controls: np.ndarray, base_constraints: np.ndarray
     ) -> np.ndarray:
         controls_vec = controls.reshape(-1)
         jacobian = np.zeros((base_constraints.size, controls_vec.size), dtype=float)
@@ -106,15 +99,11 @@ class PDIPSolver:
             jacobian[:, idx] = (constraints - base_constraints) / self.config.finite_diff_eps
         return jacobian
 
-    def _constraints_from_controls(
-        self, scenario: HighwayScenario, x0: np.ndarray, controls: np.ndarray
-    ) -> np.ndarray:
+    def _constraints_from_controls(self, scenario: Any, x0: np.ndarray, controls: np.ndarray) -> np.ndarray:
         states = scenario.forward_simulation(x0, controls)
         return scenario.collect_constraints(states, controls)
 
-    def _total_cost_from_controls(
-        self, scenario: HighwayScenario, x0: np.ndarray, controls: np.ndarray
-    ) -> float:
+    def _total_cost_from_controls(self, scenario: Any, x0: np.ndarray, controls: np.ndarray) -> float:
         states = scenario.forward_simulation(x0, controls)
         return scenario.total_cost(states, controls)
 
@@ -147,6 +136,10 @@ class PDIPSolver:
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         n_vars = r_dual.size
         n_constraints = r_pri.size
+        if n_constraints == 0:
+            hessian = np.eye(n_vars) * self.config.hessian_damping
+            delta_u = -np.linalg.solve(hessian, r_dual)
+            return delta_u, np.zeros((0,), dtype=float), np.zeros((0,), dtype=float)
         hessian = np.eye(n_vars) * self.config.hessian_damping
         kkt_matrix = np.block(
             [
