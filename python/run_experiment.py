@@ -19,7 +19,10 @@ def main() -> None:
             "lqr",
         ],
     )
-    parser.add_argument("--input", help="Input .npz file for data processing or plotting.")
+    parser.add_argument(
+        "--input",
+        help="Input CSV/metadata path prefix for data processing or plotting (e.g., highway_*_metadata.json).",
+    )
     parser.add_argument("--output-dir", default="python_outputs")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--num-samples", type=int, default=30)

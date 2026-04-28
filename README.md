@@ -43,12 +43,13 @@ Note that parameters of the PDIP algorithm, dynamics, costs, and constraints cou
 2. run a specific environment:
     - `python python/run_experiment.py --env highway`
     - `python python/run_experiment.py --env highway_multi_run --num-samples 10`
-    - `python python/run_experiment.py --env highway_data_processing --input <path-to-npz>`
+    - `python python/run_experiment.py --env highway_data_processing --input <path-to-metadata-json-or-csv>`
     - `python python/run_experiment.py --env lqr`
       - optional overrides: `--lqr-dynamics nonlinear`, `--lqr-horizon 40`, `--lqr-dt 0.02`, `--lqr-config <path-to-npz-or-json>`
-3. output files are stored in `python_outputs/`
+3. output files are stored in `python_outputs/` as CSV + JSON:
+    - `<prefix>_states.csv`, `<prefix>_controls.csv`, `<prefix>_loss_history.csv`, `<prefix>_residual_history.csv`, `<prefix>_metadata.json`
+    - highway/lqr runs also emit PNG/GIF visualizations (including highway comparison with the Julia reference) in the same folder.
 
 ## Limitations of the current implementation:
 1. The KKT conditions construction process (, e.g., in /src/lq_solvers/constrained_fbst_lq_solver.jl) has not been optimized. We can speed it up by using StaticArray.jl and automatically constructing the first-order KKT conditions approximation using automatic differentiation. However, in the current implementation, we manually programmed the       KKT conditions. 
 2. In the current implementation, we assume each player has the same state, control, and constraint dimension. However, it should be relaxed in the future.
-

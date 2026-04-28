@@ -5,10 +5,16 @@ from typing import Any, Dict, List
 import numpy as np
 
 from feedback_stackelberg.config import ExperimentConfig, PDIPConfig
-from feedback_stackelberg.io_utils import ExperimentIO, ExperimentOutput
+from feedback_stackelberg.io_utils import (
+    ExperimentIO,
+    ExperimentOutput,
+    load_multi_run_csv,
+    save_multi_run_csv,
+)
 from feedback_stackelberg.pdip_solver import PDIPSolver
 from feedback_stackelberg.scenario_highway import HighwayParameters, HighwayScenario
 from feedback_stackelberg.scenario_lqr import LQRParameters, LQRScenario, load_lqr_overrides
+from feedback_stackelberg.visualization import visualize_highway, visualize_lqr
 
 
 @dataclass
@@ -59,12 +65,14 @@ class HighwayExperiment(BaseExperiment):
         )
         if self.save_output:
             filename = self._build_filename("highway")
+            base_name = Path(filename).stem
             self.io.save(output, filename)
+            visualize_highway(scenario, output.states, self.config.output_dir, base_name)
         return output
 
     def _build_filename(self, prefix: str) -> str:
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
-        return f"{prefix}_{timestamp}.npz"
+        return f"{prefix}_{timestamp}"
 
 
 class LQRExperiment(BaseExperiment):
@@ -112,12 +120,14 @@ class LQRExperiment(BaseExperiment):
             metadata=metadata,
         )
         filename = self._build_filename("lqr")
+        base_name = Path(filename).stem
         self.io.save(output, filename)
+        visualize_lqr(params, output.states, output.controls, self.config.output_dir, base_name)
         return output
 
     def _build_filename(self, prefix: str) -> str:
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
-        return f"{prefix}_{timestamp}.npz"
+        return f"{prefix}_{timestamp}"
 
 
 class HighwayWithoutSavingExperiment(HighwayExperiment):
@@ -170,14 +180,14 @@ class HighwayMultiRunExperiment(BaseExperiment):
 
     def _save_multi_run(self, output: MultiRunOutput) -> None:
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
-        filename = f"highway_multi_run_{timestamp}.npz"
-        path = Path(self.config.output_dir) / filename
-        np.savez(
-            path,
-            x0_list=output.x0_list,
-            loss_list=output.loss_list,
-            residual_list=output.residual_list,
-            metadata=output.metadata,
+        filename = f"highway_multi_run_{timestamp}"
+        save_multi_run_csv(
+            self.config.output_dir,
+            filename,
+            output.x0_list,
+            output.loss_list,
+            output.residual_list,
+            output.metadata,
         )
 
 
@@ -230,13 +240,13 @@ class HighwayMultiRunPlotExperiment(BaseExperiment):
         self.input_path = Path(input_path)
 
     def run(self) -> Dict[str, Any]:
-        data = np.load(self.input_path, allow_pickle=True)
-        loss_list = data["loss_list"]
+        _, loss_list, _, metadata = load_multi_run_csv(self.input_path)
         mean_loss = np.nanmean(loss_list, axis=0)
         std_loss = np.nanstd(loss_list, axis=0)
         summary = {
             "mean_loss": mean_loss.tolist(),
             "std_loss": std_loss.tolist(),
+            "metadata": metadata,
         }
         summary_path = Path(self.config.output_dir) / "highway_multi_run_summary.json"
         summary_path.write_text(self._format_summary(summary), encoding="utf-8")
