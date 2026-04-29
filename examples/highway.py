@@ -9,9 +9,9 @@ Highway 实验示例
     python examples/highway.py
     
 输出:
-    - python_outputs/highway_*.csv: 状态和控制数据
-    - python_outputs/highway_*.png: 轨迹可视化图
-    - python_outputs/highway_*.gif: 动画
+    - python_outputs/highway_*/highway_*.csv: 状态和控制数据
+    - python_outputs/highway_*/highway_*.png: 轨迹可视化图
+    - python_outputs/highway_*/highway_*.gif: 动画
 """
 
 import sys
@@ -119,16 +119,17 @@ def run_highway_experiment(
     if save_output:
         import numpy as np
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
+        run_subdir = f"highway_{timestamp}"
         filename = f"highway_{timestamp}"
         
-        io = ExperimentIO(output_dir)
+        io = ExperimentIO(output_dir, run_subdir=run_subdir)
         io.save(output, filename)
         
         base_name = Path(filename).stem
-        vis_files = visualize_highway(scenario, output.states, output_dir, base_name)
+        vis_files = visualize_highway(scenario, output.states, io.output_dir, base_name)
         
         print("输出文件已保存:")
-        print(f"  - 数据目录：{output_dir}/")
+        print(f"  - 数据目录：{io.output_dir}/")
         print(f"  - 轨迹图：{vis_files['png']}")
         print(f"  - 动画：{vis_files['gif']}")
         print()

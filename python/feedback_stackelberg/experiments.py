@@ -26,15 +26,16 @@ class MultiRunOutput:
 
 
 class BaseExperiment:
-    def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig):
+    def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig, run_prefix: str):
         self.config = config
         self.solver_config = solver_config
+        self.run_prefix = run_prefix
         self.run_subdir = self._generate_run_subdir()
         self.io = ExperimentIO(config.output_dir, self.run_subdir)
 
     def _generate_run_subdir(self) -> str:
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
-        return f"run_{timestamp}"
+        return f"{self.run_prefix}_{timestamp}"
 
     def run(self) -> Any:
         raise NotImplementedError
@@ -48,7 +49,8 @@ class HighwayExperiment(BaseExperiment):
         save_output: bool = True,
         swap_roles: bool = False,
     ):
-        super().__init__(config, solver_config)
+        run_prefix = "highway_switch_leader_and_follower" if swap_roles else "highway"
+        super().__init__(config, solver_config, run_prefix=run_prefix)
         self.save_output = save_output
         self.swap_roles = swap_roles
 
@@ -72,7 +74,7 @@ class HighwayExperiment(BaseExperiment):
             filename = self._build_filename("highway")
             base_name = Path(filename).stem
             self.io.save(output, filename)
-            visualize_highway(scenario, output.states, self.config.output_dir, base_name)
+            visualize_highway(scenario, output.states, self.io.output_dir, base_name)
         return output
 
     def _build_filename(self, prefix: str) -> str:
@@ -90,7 +92,7 @@ class LQRExperiment(BaseExperiment):
         lqr_horizon: Optional[int] = None,
         lqr_dt: Optional[float] = None,
     ):
-        super().__init__(config, solver_config)
+        super().__init__(config, solver_config, run_prefix="lqr")
         self.lqr_params_path = lqr_params_path
         self.lqr_dynamics = lqr_dynamics
         self.lqr_horizon = lqr_horizon
@@ -108,14 +110,19 @@ class LQRExperiment(BaseExperiment):
             params.dynamics = self.lqr_dynamics
         params.normalize()
         scenario = LQRScenario(params=params)
+        self.solver_config.print_iterations = True
         solver = PDIPSolver(self.solver_config)
         result = solver.solve(scenario, scenario.initial_state())
+        scenario.update_fse_reference(result.decision)
+        gain_values = scenario.serialize_feedback_gains(result.decision)
         metadata = {
             "environment": "lqr",
             "dynamics": params.dynamics,
             "horizon": params.horizon,
             "state_dim": scenario.nx,
             "control_dim": scenario.nu,
+            "K1_star": gain_values["K1"],
+            "K2_star": gain_values["K2"],
         }
         output = ExperimentOutput(
             states=result.states,
@@ -127,7 +134,7 @@ class LQRExperiment(BaseExperiment):
         filename = self._build_filename("lqr")
         base_name = Path(filename).stem
         self.io.save(output, filename)
-        visualize_lqr(params, output.states, output.controls, self.config.output_dir, base_name)
+        visualize_lqr(params, output.states, output.controls, self.io.output_dir, base_name)
         return output
 
     def _build_filename(self, prefix: str) -> str:
@@ -146,6 +153,9 @@ class HighwaySwitchLeaderExperiment(HighwayExperiment):
 
 
 class HighwayMultiRunExperiment(BaseExperiment):
+    def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig):
+        super().__init__(config, solver_config, run_prefix="highway_multi_run")
+
     def run(self) -> MultiRunOutput:
         rng = np.random.default_rng(self.config.seed)
         scenario = HighwayScenario(params=HighwayParameters())
@@ -187,7 +197,7 @@ class HighwayMultiRunExperiment(BaseExperiment):
         timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
         filename = f"highway_multi_run_{timestamp}"
         save_multi_run_csv(
-            self.config.output_dir,
+            self.io.output_dir,
             filename,
             output.x0_list,
             output.loss_list,
@@ -198,15 +208,15 @@ class HighwayMultiRunExperiment(BaseExperiment):
 
 class HighwayDataProcessingExperiment(BaseExperiment):
     def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig, input_path: str):
-        super().__init__(config, solver_config)
+        super().__init__(config, solver_config, run_prefix="highway_data_processing")
         self.input_path = Path(input_path)
 
     def run(self) -> Dict[str, Any]:
         output = self.io.load(self.input_path)
         summary = self._build_summary(output)
-        summary_path = Path(self.config.output_dir) / "highway_summary.json"
+        summary_path = self.io.output_dir / "highway_summary.json"
         summary_path.write_text(self._format_summary(summary), encoding="utf-8")
-        self._plot_trajectory(output, Path(self.config.output_dir) / "highway_trajectory.png")
+        self._plot_trajectory(output, self.io.output_dir / "highway_trajectory.png")
         return summary
 
     def _build_summary(self, output: ExperimentOutput) -> Dict[str, Any]:
@@ -241,7 +251,7 @@ class HighwayDataProcessingExperiment(BaseExperiment):
 
 class HighwayMultiRunPlotExperiment(BaseExperiment):
     def __init__(self, config: ExperimentConfig, solver_config: PDIPConfig, input_path: str):
-        super().__init__(config, solver_config)
+        super().__init__(config, solver_config, run_prefix="highway_multi_run_plot")
         self.input_path = Path(input_path)
 
     def run(self) -> Dict[str, Any]:
@@ -253,9 +263,9 @@ class HighwayMultiRunPlotExperiment(BaseExperiment):
             "std_loss": std_loss.tolist(),
             "metadata": metadata,
         }
-        summary_path = Path(self.config.output_dir) / "highway_multi_run_summary.json"
+        summary_path = self.io.output_dir / "highway_multi_run_summary.json"
         summary_path.write_text(self._format_summary(summary), encoding="utf-8")
-        self._plot_loss(mean_loss, std_loss, Path(self.config.output_dir) / "highway_multi_run_loss.png")
+        self._plot_loss(mean_loss, std_loss, self.io.output_dir / "highway_multi_run_loss.png")
         return summary
 
     def _format_summary(self, summary: Dict[str, Any]) -> str:

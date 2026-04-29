@@ -161,6 +161,14 @@ class HighwayScenario:
             states[t + 1] = self.dynamics(states[t], controls[t])
         return states
 
+    def decision_shape(self) -> tuple[int, int]:
+        return (self.params.horizon, self.nu)
+
+    def rollout(self, x0: np.ndarray, decision: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        controls = np.asarray(decision, dtype=float).reshape(self.params.horizon, self.nu)
+        states = self.forward_simulation(x0, controls)
+        return states, controls
+
     def total_cost(self, states: np.ndarray, controls: np.ndarray) -> float:
         total = 0.0
         for t in range(self.params.horizon):

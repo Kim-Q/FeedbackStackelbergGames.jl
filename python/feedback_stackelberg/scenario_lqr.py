@@ -31,12 +31,14 @@ class LQRParameters:
     R22: Union[float, np.ndarray] = 0.9730    # 对 u2 的权重
     R21: Union[float, np.ndarray] = 0         # 对 u1 的权重
     
-    # FSE (Feedback Stackelberg Equilibrium) 解
-    FSE_solutions: Dict[str, Dict[str, float]] = field(default_factory=lambda: {
-        "SE 1": {"K1_star": -0.6662, "K2_star": 1.1621},
-        "SE 2": {"K1_star": -0.9542, "K2_star": 0.8523},
-        "SE 3": {"K1_star": -1.6526, "K2_star": 0.7539}
-    })
+    # FSE (Feedback Stackelberg Equilibrium) 解（运行后可更新为收敛增益）
+    FSE_solutions: Dict[str, Dict[str, Union[float, list[float]]]] = field(
+        default_factory=lambda: {
+            "SE 1": {"K1_star": -0.6662, "K2_star": 1.1621},
+            "SE 2": {"K1_star": -0.9542, "K2_star": 0.8523},
+            "SE 3": {"K1_star": -1.6526, "K2_star": 0.7539}
+        }
+    )
     
     # 终端代价权重 (可选，默认与阶段代价相同)
     Q_terminal_leader: Optional[Union[float, np.ndarray]] = None
@@ -204,6 +206,60 @@ class LQRScenario:
             states[t + 1] = self.dynamics(states[t], controls[t])
         return states
 
+    def decision_shape(self) -> tuple[int, int]:
+        """决策变量形状（反馈增益 K，满足 u = K x）"""
+        return (self.nu, self.nx)
+
+    def rollout(self, x0: np.ndarray, decision: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """根据反馈增益 K 生成状态和控制序列"""
+        gains = self._reshape_gains(decision)
+        states = np.zeros((self.params.horizon + 1, self.nx), dtype=float)
+        controls = np.zeros((self.params.horizon, self.nu), dtype=float)
+        states[0] = x0
+        for t in range(self.params.horizon):
+            controls[t] = (gains @ states[t].reshape(-1, 1)).ravel()
+            states[t + 1] = self.dynamics(states[t], controls[t])
+        return states, controls
+
+    def extract_feedback_gains(self, decision: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        gains = self._reshape_gains(decision)
+        k1 = gains[: self._nu_leader, :]
+        k2 = gains[self._nu_leader :, :]
+        return k1, k2
+
+    def format_iteration(
+        self,
+        decision: np.ndarray,
+        total_cost: float,
+        residual_norm: float,
+        outer_iter: int,
+        iteration: int,
+    ) -> str:
+        k1, k2 = self.extract_feedback_gains(decision)
+        k1_str = np.array2string(k1, precision=4, separator=",", suppress_small=True)
+        k2_str = np.array2string(k2, precision=4, separator=",", suppress_small=True)
+        return (
+            f"[outer {outer_iter + 1}, iter {iteration + 1}] "
+            f"cost={total_cost:.6f}, residual={residual_norm:.3e}, "
+            f"K1={k1_str}, K2={k2_str}"
+        )
+
+    def update_fse_reference(self, decision: np.ndarray) -> None:
+        k1, k2 = self.extract_feedback_gains(decision)
+        self.params.FSE_solutions = {
+            "converged": {
+                "K1_star": self._serialize_gain(k1),
+                "K2_star": self._serialize_gain(k2),
+            }
+        }
+
+    def serialize_feedback_gains(self, decision: np.ndarray) -> Dict[str, Union[float, list[float]]]:
+        k1, k2 = self.extract_feedback_gains(decision)
+        return {
+            "K1": self._serialize_gain(k1),
+            "K2": self._serialize_gain(k2),
+        }
+
     def total_cost(self, states: np.ndarray, controls: np.ndarray) -> float:
         """计算总代价"""
         total = 0.0
@@ -267,6 +323,15 @@ class LQRScenario:
         u1_theta_term = float(u1 @ self.params.Theta2 @ u1)
         u1_r21_term = float(u1 @ self.params.R21 @ u1)
         return 0.5 * (state_term + u2_term + u1_theta_term + u1_r21_term)
+
+    def _reshape_gains(self, decision: np.ndarray) -> np.ndarray:
+        return np.asarray(decision, dtype=float).reshape(self.nu, self.nx)
+
+    def _serialize_gain(self, gain: np.ndarray) -> Union[float, list[float]]:
+        gain_array = np.asarray(gain, dtype=float)
+        if gain_array.size == 1:
+            return float(gain_array.ravel()[0])
+        return gain_array.tolist()
 
 
 def load_lqr_overrides(path: Union[str, Path]) -> Dict[str, Any]:

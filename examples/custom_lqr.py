@@ -9,8 +9,8 @@
     python examples/custom_lqr.py
     
 输出:
-    - python_outputs/lqr_*.csv: 状态和控制数据
-    - python_outputs/lqr_*.png: 可视化图
+    - python_outputs/lqr_*/lqr_*.csv: 状态和控制数据
+    - python_outputs/lqr_*/lqr_*.png: 可视化图
 """
 
 import sys
@@ -57,6 +57,7 @@ class CustomLQRExperiment:
             barrier_mu=1.0,
             barrier_decay=0.5,
             residual_tol=1e-6,
+            print_iterations=True,
         )
         
         # 创建场景和求解器
@@ -141,11 +142,14 @@ class CustomLQRExperiment:
         # ========== 步骤 2: 使用 PDIP 求解器求解 ==========
         print("开始求解...")
         result = self.solver.solve(self.scenario, initial_state)
+        self.scenario.update_fse_reference(result.decision)
+        gain_values = self.scenario.serialize_feedback_gains(result.decision)
         
         print(f"求解完成!")
         print(f"  - 最终损失：{result.loss_history[-1][-1]:.6f}")
         print(f"  - 最终残差：{result.residual_history[-1][-1]:.6e}")
         print(f"  - 总迭代次数：{sum(len(h) for h in result.loss_history)}")
+        print(f"  - 收敛增益：K1={gain_values['K1']}, K2={gain_values['K2']}")
         print()
         
         # ========== 步骤 3: 打包实验结果 ==========
@@ -156,6 +160,8 @@ class CustomLQRExperiment:
             "control_dim": self.scenario.nu,
             "final_loss": result.loss_history[-1][-1],
             "final_residual": result.residual_history[-1][-1],
+            "K1_star": gain_values["K1"],
+            "K2_star": gain_values["K2"],
         }
         
         output = ExperimentOutput(
@@ -169,9 +175,10 @@ class CustomLQRExperiment:
         # ========== 步骤 4: 保存结果和可视化 ==========
         if save_output:
             timestamp = np.datetime_as_string(np.datetime64("now"), unit="s").replace(":", "-")
+            run_subdir = f"lqr_{timestamp}"
             filename = f"lqr_{timestamp}"
             
-            io = ExperimentIO(self.output_dir)
+            io = ExperimentIO(self.output_dir, run_subdir=run_subdir)
             io.save(output, filename)
             
             base_name = Path(filename).stem
@@ -179,12 +186,12 @@ class CustomLQRExperiment:
                 self.lqr_params,
                 output.states,
                 output.controls,
-                self.output_dir,
+                io.output_dir,
                 base_name,
             )
             
             print("输出文件已保存:")
-            print(f"  - 数据目录：{self.output_dir}/")
+            print(f"  - 数据目录：{io.output_dir}/")
             print(f"  - 轨迹图：{vis_files['png']}")
             print(f"  - 动画：{vis_files.get('gif', 'N/A')}")
             print()
