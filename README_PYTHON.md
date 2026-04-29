@@ -56,9 +56,9 @@ python examples/highway.py \
 ```
 
 **输出文件：**
-- `highway_*.csv`: 状态轨迹、控制输入、损失历史、残差历史
-- `highway_*.png`: 轨迹可视化图
-- `highway_*.gif`: 动画
+- `python_outputs/highway_*/highway_*.csv`: 状态轨迹、控制输入、损失历史、残差历史
+- `python_outputs/highway_*/highway_*.png`: 轨迹可视化图
+- `python_outputs/highway_*/highway_*.gif`: 动画
 
 ### 2. 自定义 LQR 实验
 
@@ -67,6 +67,8 @@ python examples/highway.py \
 ```bash
 python examples/custom_lqr.py
 ```
+
+LQR 环境使用反馈增益作为优化变量：u₁ = K₁ x，u₂ = K₂ x，收敛后的 K₁/K₂ 会写入输出元数据并作为 FSE 参考值。
 
 **选择不同的场景：**
 ```bash
@@ -88,10 +90,10 @@ PDIP 用于求解带不等式约束的优化问题：
 
 ```
 min f(u)
-s.t. g(u) <= 0
+s.t. g(u) >= 0
 ```
 
-通过引入松弛变量 s > 0，将不等式转为等式：`g(u) + s = 0`
+通过引入松弛变量 s > 0，将不等式转为等式：`g(u) - s = 0`
 
 构造障碍问题：`min f(u) - μ * Σlog(s_i)`
 
@@ -102,7 +104,7 @@ s.t. g(u) <= 0
 ```python
 # ========== 步骤 1: 初始化原始变量和对偶变量 ==========
 x0 = initial_state
-controls = zeros(...)
+decision = zeros(...)
 slack = ones(...) * initial_slack
 dual = ones(...) * initial_dual
 mu = barrier_mu
@@ -114,16 +116,16 @@ for outer_iter in range(outer_iter):
     for iteration in range(max_iter):
         
         # ----- 步骤 3.1: 前向模拟得到状态轨迹 -----
-        states = forward_simulation(x0, controls)
+    states, controls = rollout(x0, decision)
         
         # ----- 步骤 3.2: 计算约束与目标函数 -----
-        constraints = collect_constraints(states, controls)
-        total_cost = total_cost(states, controls)
+    constraints = collect_constraints(states, controls)
+    total_cost = total_cost(states, controls)
         
         # ----- 步骤 3.3: 构造 KKT 残差 -----
         # KKT 条件：
         # 1. 平稳性：∇f(u) - J(u)^T * λ = 0
-        # 2. 可行性：g(u) + s = 0
+    # 2. 可行性：g(u) - s = 0
         # 3. 互补松弛：s_i * λ_i = μ
         grad = finite_difference_gradient(...)
         jacobian = finite_difference_jacobian(...)
@@ -137,7 +139,7 @@ for outer_iter in range(outer_iter):
         step = line_search(slack, dual, delta_slack, delta_dual)
         
         # ----- 步骤 3.6: 更新原始变量与对偶变量 -----
-        controls += step * delta_u
+    decision += step * delta_u
         slack += step * delta_slack
         dual += step * delta_dual
     
@@ -193,13 +195,21 @@ class CustomScenario:
     def forward_simulation(self, x0: np.ndarray, controls: np.ndarray) -> np.ndarray:
         """前向仿真"""
         pass
+
+    def decision_shape(self) -> tuple[int, ...]:
+        """决策变量形状（默认控制序列，LQR 可返回反馈增益矩阵形状）"""
+        pass
+
+    def rollout(self, x0: np.ndarray, decision: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """根据决策变量生成状态与控制序列"""
+        pass
     
     def total_cost(self, states: np.ndarray, controls: np.ndarray) -> float:
         """总成本"""
         pass
     
     def collect_constraints(self, states: np.ndarray, controls: np.ndarray) -> np.ndarray:
-        """收集所有约束（不等式约束 g(u) <= 0）"""
+        """收集所有约束（不等式约束 g(u) >= 0）"""
         pass
 ```
 
